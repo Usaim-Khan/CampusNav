@@ -158,14 +158,49 @@ void buildCampusGraph(Graph& g) {
     }
 }
 
+// ============================================================ Amna: min-heap
+struct HeapItem { double d; int node; };
+
+class MinHeap {
+public:
+    MinHeap() : n(0) {}
+    bool empty() const { return n == 0; }
+    void push(int node, double d) {
+        a[n] = {d, node};
+        int i = n++;
+        while (i > 0 && a[(i - 1) / 2].d > a[i].d) {   // sift up
+            swapItems(a[i], a[(i - 1) / 2]);
+            i = (i - 1) / 2;
+        }
+    }
+    HeapItem pop() {                                  // caller checks empty() first
+        HeapItem top = a[0];
+        a[0] = a[--n];
+        int i = 0;
+        while (true) {                                // sift down
+            int l = 2 * i + 1, r = l + 1, m = i;
+            if (l < n && a[l].d < a[m].d) m = l;
+            if (r < n && a[r].d < a[m].d) m = r;
+            if (m == i) break;
+            swapItems(a[i], a[m]);
+            i = m;
+        }
+        return top;
+    }
+private:
+    HeapItem a[256];   // enough for all relaxations in this graph
+    int n;
+    static void swapItems(HeapItem& x, HeapItem& y) { HeapItem t = x; x = y; y = t; }
+};
+
 int main() {
-    Graph g;
-    buildCampusGraph(g);
-    printf("Campus graph: %d nodes, %d walkways\n\n", N, NUM_EDGES);
-    for (int i = 0; i < N; i++) {
-        printf("%2d %-30s ->", i, NODES[i].name);
-        for (Edge* e = g.head[i]; e; e = e->next) printf(" %d", e->to);
-        printf("\n");
+    MinHeap h;
+    double values[] = {42.5, 7.0, 19.25, 3.5, 88.0, 12.0};
+    for (int i = 0; i < 6; i++) h.push(i, values[i]);
+    printf("Heap pops in increasing order:\n");
+    while (!h.empty()) {
+        HeapItem it = h.pop();
+        printf("  node %d  distance %.2f\n", it.node, it.d);
     }
     return 0;
 }
