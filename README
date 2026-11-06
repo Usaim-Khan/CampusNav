@@ -1,0 +1,21 @@
+# CampusNav - Campus Route Finder (CLI)
+
+Finds the shortest walking route between places on the FAST-NUCES Karachi campus.
+The campus is a weighted graph; routes come from Dijkstra's algorithm and are drawn
+and colored in the terminal.
+
+Features: shortest route, multi-stop route (A -> B -> C ...), nearest facility.
+
+Data structures are written by hand (no std::vector / map / priority_queue / stack / queue):
+hash table, stack, adjacency-list graph and min-heap.
+
+## Build and run
+    g++ -std=c++17 -O2 campus_map.cpp -o campus_map
+    ./campus_map
+
+Use a terminal at least 105 columns wide (UTF-8 and ANSI colors).
+
+## Team
+- Usaim - hash table, stack, map drawing, menu / CLI
+- Memoona - map data, graph, distances, nearest facility
+- Amna - min-heap, Dijkstra, multi-stop route, input checks
