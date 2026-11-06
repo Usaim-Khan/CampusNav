@@ -1,5 +1,6 @@
 // CampusNav - Campus Route Finder (CLI) - C++17
 // Group project: Usaim, Memoona, Amna.
+// Memoona connected through GitHub
 
 #include <cstdio>
 #include <cstring>
