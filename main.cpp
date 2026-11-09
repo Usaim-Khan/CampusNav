@@ -116,6 +116,15 @@ const EdgeDef EDGES[NUM_EDGES] = {
     {"m", "n"}, {"n", "Sports Room"},
 };
 
+// Scale: the campus is 270 m wide (measured on Google Maps) and spans 1475 px
+// in the map image (boundary x = 25 .. 1500), so 1 px = 270 / 1475 m.
+const double CAMPUS_WIDTH_M = 270.0;
+const double PX_TO_M = CAMPUS_WIDTH_M / 1475.0;
+const double WALK_SPEED = 1.3;   // meters per second
+
+// Walking time in minutes for a distance in meters.
+double walkMinutes(double meters) { return meters / WALK_SPEED / 60.0; }
+
 // ============================================================ Memoona: graph
 // Adjacency list built from hand-written singly linked lists.
 struct Edge { int to; double w; Edge* next; };
@@ -153,7 +162,7 @@ int nodeId(const char* name) { return nameTable().get(name); }
 void buildCampusGraph(Graph& g) {
     for (int i = 0; i < NUM_EDGES; i++) {
         int u = nodeId(EDGES[i].a), v = nodeId(EDGES[i].b);
-        double w = hypot(NODES[u].x - NODES[v].x, NODES[u].y - NODES[v].y);   // pixels for now
+        double w = hypot(NODES[u].x - NODES[v].x, NODES[u].y - NODES[v].y) * PX_TO_M;   // meters
         g.addEdge(u, v, w);
     }
 }
@@ -194,13 +203,17 @@ private:
 };
 
 int main() {
-    MinHeap h;
-    double values[] = {42.5, 7.0, 19.25, 3.5, 88.0, 12.0};
-    for (int i = 0; i < 6; i++) h.push(i, values[i]);
-    printf("Heap pops in increasing order:\n");
-    while (!h.empty()) {
-        HeapItem it = h.pop();
-        printf("  node %d  distance %.2f\n", it.node, it.d);
-    }
+    Graph g;
+    buildCampusGraph(g);
+    printf("Walkways (length in meters):\n");
+    double total = 0;
+    for (int u = 0; u < N; u++)
+        for (Edge* e = g.head[u]; e; e = e->next)
+            if (u < e->to) {
+                printf("  %-30s - %-30s %6.1f m\n", NODES[u].name, NODES[e->to].name, e->w);
+                total += e->w;
+            }
+    printf("\nTotal walkway length: %.0f m\n", total);
+    printf("Time to walk all of it at %.1f m/s: %.1f min\n", WALK_SPEED, walkMinutes(total));
     return 0;
 }
