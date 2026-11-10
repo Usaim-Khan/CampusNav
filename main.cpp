@@ -202,18 +202,63 @@ private:
     static void swapItems(HeapItem& x, HeapItem& y) { HeapItem t = x; x = y; y = t; }
 };
 
+// ============================================================ Amna: Dijkstra + path building
+const double INF = 1e18;
+
+// Single-source Dijkstra. Fills dist[] and parent[] for every node reached.
+// If stopAt >= 0 it stops as soon as that node is finalized (faster for one target).
+void dijkstra(const Graph& g, int src, double dist[], int parent[], int stopAt = -1) {
+    for (int i = 0; i < N; i++) { dist[i] = INF; parent[i] = -1; }
+    dist[src] = 0;
+    MinHeap heap;
+    heap.push(src, 0);
+    while (!heap.empty()) {
+        HeapItem cur = heap.pop();
+        if (cur.d > dist[cur.node]) continue;   // stale entry
+        if (cur.node == stopAt) break;
+        for (Edge* e = g.head[cur.node]; e; e = e->next) {
+            double nd = cur.d + e->w;
+            if (nd < dist[e->to]) {
+                dist[e->to] = nd;
+                parent[e->to] = cur.node;
+                heap.push(e->to, nd);
+            }
+        }
+    }
+}
+
+// The route being built (node ids in walking order, places and junctions).
+const int PATHCAP = 400;
+int pathNodes[PATHCAP];
+int pathLen = 0;
+void clearPath() { pathLen = 0; }
+
+// Appends the shortest path src -> dst (from parent[]) to the route.
+// The stack reverses the parent chain; the first leg also adds src.
+void appendLeg(const int parent[], int src, int dst) {
+    IntStack st;
+    for (int cur = dst; cur != src; cur = parent[cur]) st.push(cur);
+    if (pathLen == 0) pathNodes[pathLen++] = src;
+    while (!st.empty()) pathNodes[pathLen++] = st.pop();
+}
+
 int main() {
     Graph g;
     buildCampusGraph(g);
-    printf("Walkways (length in meters):\n");
-    double total = 0;
-    for (int u = 0; u < N; u++)
-        for (Edge* e = g.head[u]; e; e = e->next)
-            if (u < e->to) {
-                printf("  %-30s - %-30s %6.1f m\n", NODES[u].name, NODES[e->to].name, e->w);
-                total += e->w;
-            }
-    printf("\nTotal walkway length: %.0f m\n", total);
-    printf("Time to walk all of it at %.1f m/s: %.1f min\n", WALK_SPEED, walkMinutes(total));
+    int src = nodeId("Main Gate"), dst = nodeId("Sports Room");
+    double dist[N];
+    int parent[N];
+    dijkstra(g, src, dist, parent, dst);
+    clearPath();
+    appendLeg(parent, src, dst);
+    printf("Shortest route: ");
+    bool first = true;
+    for (int i = 0; i < pathLen; i++) {
+        if (pathNodes[i] >= NUM_PLACES) continue;   // skip junctions
+        printf("%s%s", first ? "" : " -> ", NODES[pathNodes[i]].name);
+        first = false;
+    }
+    printf("\nDistance: %.0f m   Walking time: ~%.1f min\n", dist[dst], walkMinutes(dist[dst]));
     return 0;
 }
+
