@@ -1,9 +1,13 @@
 // CampusNav - Campus Route Finder (CLI) - C++17
 // Group project: Usaim, Memoona, Amna.
 
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <iostream>
+#include <string>
 using namespace std;
 
 // ============================================================ Usaim: hash table + stack
@@ -242,23 +246,99 @@ void appendLeg(const int parent[], int src, int dst) {
     while (!st.empty()) pathNodes[pathLen++] = st.pop();
 }
 
-int main() {
-    Graph g;
-    buildCampusGraph(g);
-    int src = nodeId("Main Gate"), dst = nodeId("Sports Room");
-    double dist[N];
-    int parent[N];
-    dijkstra(g, src, dist, parent, dst);
-    clearPath();
-    appendLeg(parent, src, dst);
-    printf("Shortest route: ");
+// ============================================================ Usaim: terminal colors, menu and CLI
+const char *RESET = "\033[0m", *BOLD = "\033[1m";
+const char* CYANB = "\033[96m\033[1m";
+// ---- input helpers
+void printLegend() {
+    printf("\n%sLocations%s\n", BOLD, RESET);
+    int half = (NUM_PLACES + 1) / 2;
+    for (int i = 0; i < half; i++) {
+        printf("  %s%2d%s. %-30s", CYANB, i + 1, RESET, NODES[i].name);
+        int j = i + half;
+        if (j < NUM_PLACES) printf("%s%2d%s. %s", CYANB, j + 1, RESET, NODES[j].name);
+        printf("\n");
+    }
+}
+
+string lower(string s) {
+    for (char& c : s) c = (char)tolower((unsigned char)c);
+    return s;
+}
+
+// Asks for a place by number or (unique part of) name.
+int pickPlace(const char* prompt) {
+    while (true) {
+        cout << prompt << flush;
+        string s;
+        getline(cin, s);
+        bool digits = !s.empty();
+        for (char c : s) if (!isdigit((unsigned char)c)) digits = false;
+        if (digits) {
+            int v = atoi(s.c_str());
+            if (v >= 1 && v <= NUM_PLACES) return v - 1;
+        } else if (!s.empty()) {
+            string q = lower(s);
+            int found = -1, count = 0;
+            for (int i = 0; i < NUM_PLACES; i++)
+                if (lower(NODES[i].name).find(q) != string::npos) { found = i; count++; }
+            if (count == 1) return found;
+        }
+        printf("  Invalid or ambiguous. Enter a number from the list or a unique name.\n");
+    }
+}
+
+// ---- output helpers
+void printPlacesOnPath() {
+    printf("\n%sRoute:%s ", BOLD, RESET);
     bool first = true;
     for (int i = 0; i < pathLen; i++) {
         if (pathNodes[i] >= NUM_PLACES) continue;   // skip junctions
-        printf("%s%s", first ? "" : " -> ", NODES[pathNodes[i]].name);
+        printf("%s%s", first ? "" : " → ", NODES[pathNodes[i]].name);
         first = false;
     }
-    printf("\nDistance: %.0f m   Walking time: ~%.1f min\n", dist[dst], walkMinutes(dist[dst]));
-    return 0;
+    printf("\n");
 }
 
+void printTotals(double d) {
+    printf("%sDistance:%s %.0f m   %sWalking time:%s ~%.1f min\n",
+           BOLD, RESET, d, BOLD, RESET, walkMinutes(d));
+}
+
+// ---- feature 1: shortest route between two places
+void findRoute(const Graph& g) {
+    printLegend();
+    int src = pickPlace("\nStart (number or name): ");
+    int dst = pickPlace("Destination (number or name): ");
+    if (src == dst) { printf("Start and destination are the same.\n"); return; }
+
+    double dist[N];
+    int parent[N];
+    dijkstra(g, src, dist, parent, dst);
+    if (dist[dst] >= INF) { printf("No route found.\n"); return; }
+
+    clearPath();
+    appendLeg(parent, src, dst);
+    printPlacesOnPath();
+    printTotals(dist[dst]);
+    clearPath();
+}
+
+int main() {
+    Graph g;
+    buildCampusGraph(g);
+    clearPath();
+
+    while (true) {
+        printf("\n%s=== CampusNav ===%s\n", BOLD, RESET);
+        printf("1. Shortest route\n2. List locations\n3. Quit\nChoice: ");
+        fflush(stdout);
+        string choice;
+        getline(cin, choice);
+        if (choice == "1") findRoute(g);
+        else if (choice == "2") printLegend();
+        else if (choice == "3") { printf("Goodbye!\n"); break; }
+        else printf("Please enter 1-3.\n");
+    }
+    return 0;
+}
