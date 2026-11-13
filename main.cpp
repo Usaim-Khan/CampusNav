@@ -129,6 +129,17 @@ const double WALK_SPEED = 1.3;   // meters per second
 // Walking time in minutes for a distance in meters.
 double walkMinutes(double meters) { return meters / WALK_SPEED / 60.0; }
 
+// Building outlines and the campus boundary, used when drawing the map.
+struct Box { int x1, y1, x2, y2; const char* label; };
+const int NUM_BOXES = 7;
+const Box BOXES[NUM_BOXES] = {
+    {92, 250, 250, 655, "EE BLOCK"},     {542, 395, 978, 600, "CS BUILDING"},
+    {1038, 443, 1220, 655, "MULTI HALL"}, {1066, 161, 1425, 245, "PARKING"},
+    {798, 216, 963, 312, "BASKETBALL"},   {1292, 280, 1425, 368, "COURT"},
+    {1292, 385, 1425, 580, "FOOTBALL"},
+};
+const int BOUND_X1 = 25, BOUND_Y1 = 95, BOUND_X2 = 1500, BOUND_Y2 = 727;
+
 // ============================================================ Memoona: graph
 // Adjacency list built from hand-written singly linked lists.
 struct Edge { int to; double w; Edge* next; };
