@@ -8,6 +8,9 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 using namespace std;
 
 // ============================================================ Usaim: hash table + stack
@@ -258,8 +261,121 @@ void appendLeg(const int parent[], int src, int dst) {
 }
 
 // ============================================================ Usaim: terminal colors, menu and CLI
-const char *RESET = "\033[0m", *BOLD = "\033[1m";
+const char *RESET = "\033[0m", *DIM = "\033[90m", *BOLD = "\033[1m";
 const char* CYANB = "\033[96m\033[1m";
+
+// ---- map drawing: the grid is printed with ANSI colors, roads use Bresenham's line algorithm
+const int COL_DIV = 15, ROW_DIV = 28;   // pixel -> terminal cell scale
+const int GW = 104, GH = 28;            // grid size in cells
+
+struct Cell { const char* ch; const char* col; };
+Cell grid[GH][GW];
+
+int cellCol(int x) { return (int)lround((double)x / COL_DIV); }
+int cellRow(int y) { return (int)lround((double)y / ROW_DIV); }
+
+void put(int c, int r, const char* ch, const char* col) {
+    if (c >= 0 && c < GW && r >= 0 && r < GH) grid[r][c] = {ch, col};
+}
+
+void drawEdge(int u, int v) {
+    int c1 = cellCol(NODES[u].x), r1 = cellRow(NODES[u].y);
+    int c2 = cellCol(NODES[v].x), r2 = cellRow(NODES[v].y);
+    const char* ch = (c1 == c2) ? "│" : (r1 == r2) ? "─" : "·";
+    int dc = abs(c2 - c1), dr = abs(r2 - r1);
+    int sc = c1 < c2 ? 1 : -1, sr = r1 < r2 ? 1 : -1;
+    int err = dc - dr, c = c1, r = r1;
+    while (true) {   // Bresenham line
+        Cell& cell = grid[r][c];
+        if (strcmp(cell.ch, " ") == 0 || strcmp(cell.col, DIM) == 0) put(c, r, ch, DIM);
+        if (c == c2 && r == r2) break;
+        int e2 = 2 * err;
+        if (e2 > -dr) { err -= dr; c += sc; }
+        if (e2 < dc) { err += dc; r += sr; }
+    }
+}
+
+void putText(int c, int r, const char* text, const char* col) {
+    // ASCII only (labels), one cell per character; each char needs its own
+    // persistent C string because grid cells store pointers.
+    static char one[128][2];
+    for (int i = 0; text[i]; i++) {
+        unsigned char ch = (unsigned char)text[i] & 127;
+        one[ch][0] = (char)ch; one[ch][1] = 0;
+        put(c + i, r, one[ch], col);
+    }
+}
+
+// Makes the Windows console show UTF-8 box characters and ANSI colors.
+void setupConsole() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode = 0;
+    if (GetConsoleMode(h, &mode)) SetConsoleMode(h, mode | 0x0004);   // enable ANSI colors
+#endif
+}
+
+void drawMap() {
+    for (int r = 0; r < GH; r++)
+        for (int c = 0; c < GW; c++) grid[r][c] = {" ", ""};
+
+    // campus boundary (open at the main gate)
+    int bc1 = cellCol(BOUND_X1), br1 = cellRow(BOUND_Y1);
+    int bc2 = cellCol(BOUND_X2), br2 = cellRow(BOUND_Y2);
+    int gateCol = cellCol(NODES[0].x);
+    for (int c = bc1; c <= bc2; c++) {
+        if (c != gateCol) put(c, br1, "═", DIM);
+        put(c, br2, "═", DIM);
+    }
+    for (int r = br1; r <= br2; r++) { put(bc1, r, "║", DIM); put(bc2, r, "║", DIM); }
+    put(bc1, br1, "╔", DIM); put(bc2, br1, "╗", DIM);
+    put(bc1, br2, "╚", DIM); put(bc2, br2, "╝", DIM);
+    const char* title = " UNIVERSITY CAMPUS ";
+    putText((bc1 + bc2 - (int)strlen(title)) / 2, br2, title, DIM);
+
+    // building boxes
+    for (int i = 0; i < NUM_BOXES; i++) {
+        const Box& b = BOXES[i];
+        int c1 = cellCol(b.x1), r1 = cellRow(b.y1), c2 = cellCol(b.x2), r2 = cellRow(b.y2);
+        for (int c = c1; c <= c2; c++) { put(c, r1, "─", DIM); put(c, r2, "─", DIM); }
+        for (int r = r1; r <= r2; r++) { put(c1, r, "│", DIM); put(c2, r, "│", DIM); }
+        put(c1, r1, "┌", DIM); put(c2, r1, "┐", DIM);
+        put(c1, r2, "└", DIM); put(c2, r2, "┘", DIM);
+        putText((c1 + c2 - (int)strlen(b.label)) / 2 + 1, (r1 + r2) / 2, b.label, DIM);
+    }
+
+    // walkways
+    for (int i = 0; i < NUM_EDGES; i++)
+        drawEdge(nodeId(EDGES[i].a), nodeId(EDGES[i].b));
+
+    // nodes: places show their number, junctions show '+'
+    static char labels[N][4];
+    for (int i = 0; i < N; i++) {
+        const char* col;
+        const char* text;
+        if (i < NUM_PLACES) {
+            snprintf(labels[i], 4, "%d", i + 1);
+            text = labels[i]; col = CYANB;
+        } else {
+            text = "+"; col = DIM;
+        }
+        int c = cellCol(NODES[i].x), r = cellRow(NODES[i].y);
+        putText(c - (int)strlen(text) / 2, r, text, col);
+    }
+
+    // print the grid, skipping trailing blanks on each row
+    for (int r = 0; r < GH; r++) {
+        int last = -1;
+        for (int c = 0; c < GW; c++) if (strcmp(grid[r][c].ch, " ") != 0) last = c;
+        for (int c = 0; c <= last; c++) {
+            if (grid[r][c].col[0]) { fputs(grid[r][c].col, stdout); fputs(grid[r][c].ch, stdout); fputs(RESET, stdout); }
+            else fputs(grid[r][c].ch, stdout);
+        }
+        fputc('\n', stdout);
+    }
+}
+
 // ---- input helpers
 void printLegend() {
     printf("\n%sLocations%s\n", BOLD, RESET);
@@ -336,20 +452,22 @@ void findRoute(const Graph& g) {
 }
 
 int main() {
+    setupConsole();
     Graph g;
     buildCampusGraph(g);
     clearPath();
 
     while (true) {
         printf("\n%s=== CampusNav ===%s\n", BOLD, RESET);
-        printf("1. Shortest route\n2. List locations\n3. Quit\nChoice: ");
+        printf("1. Show map\n2. Shortest route\n3. List locations\n4. Quit\nChoice: ");
         fflush(stdout);
         string choice;
         getline(cin, choice);
-        if (choice == "1") findRoute(g);
-        else if (choice == "2") printLegend();
-        else if (choice == "3") { printf("Goodbye!\n"); break; }
-        else printf("Please enter 1-3.\n");
+        if (choice == "1") { drawMap(); printLegend(); }
+        else if (choice == "2") findRoute(g);
+        else if (choice == "3") printLegend();
+        else if (choice == "4") { printf("Goodbye!\n"); break; }
+        else printf("Please enter 1-4.\n");
     }
     return 0;
 }
