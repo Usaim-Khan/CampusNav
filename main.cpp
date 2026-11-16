@@ -394,11 +394,13 @@ string lower(string s) {
 }
 
 // Asks for a place by number or (unique part of) name.
-int pickPlace(const char* prompt) {
+// If allowEmpty is true, an empty line returns -1.
+int pickPlace(const char* prompt, bool allowEmpty = false) {
     while (true) {
         cout << prompt << flush;
         string s;
         getline(cin, s);
+        if (s.empty() && allowEmpty) return -1;
         bool digits = !s.empty();
         for (char c : s) if (!isdigit((unsigned char)c)) digits = false;
         if (digits) {
@@ -451,6 +453,42 @@ void findRoute(const Graph& g) {
     clearPath();
 }
 
+// ---- feature 2: multi-stop route (A -> B -> C ...): one Dijkstra run per leg
+const int MAX_STOPS = 10;
+
+void multiStopRoute(const Graph& g) {
+    printLegend();
+    printf("\nEnter your stops in order (2 to %d). Press Enter on an empty line to finish.\n", MAX_STOPS);
+    int stops[MAX_STOPS];
+    int ns = 0;
+    while (ns < MAX_STOPS) {
+        char prompt[48];
+        if (ns == 0) snprintf(prompt, sizeof prompt, "Start: ");
+        else snprintf(prompt, sizeof prompt, "Stop %d%s: ", ns + 1, ns >= 2 ? " (Enter to finish)" : "");
+        int s = pickPlace(prompt, ns >= 2);
+        if (s < 0) break;
+        stops[ns++] = s;
+    }
+
+    clearPath();
+    double legDist[MAX_STOPS], total = 0;
+    for (int k = 0; k + 1 < ns; k++) {
+        double dist[N];
+        int parent[N];
+        dijkstra(g, stops[k], dist, parent, stops[k + 1]);
+        if (dist[stops[k + 1]] >= INF) { printf("No route found for leg %d.\n", k + 1); clearPath(); return; }
+        legDist[k] = dist[stops[k + 1]];
+        total += legDist[k];
+        appendLeg(parent, stops[k], stops[k + 1]);
+    }
+    printf("\n%sLegs:%s\n", BOLD, RESET);
+    for (int k = 0; k + 1 < ns; k++)
+        printf("  %d. %s → %s   %.0f m\n", k + 1, NODES[stops[k]].name, NODES[stops[k + 1]].name, legDist[k]);
+    printPlacesOnPath();
+    printTotals(total);
+    clearPath();
+}
+
 int main() {
     setupConsole();
     Graph g;
@@ -459,15 +497,16 @@ int main() {
 
     while (true) {
         printf("\n%s=== CampusNav ===%s\n", BOLD, RESET);
-        printf("1. Show map\n2. Shortest route\n3. List locations\n4. Quit\nChoice: ");
+        printf("1. Show map\n2. Shortest route\n3. Multi-stop route\n4. List locations\n5. Quit\nChoice: ");
         fflush(stdout);
         string choice;
         getline(cin, choice);
         if (choice == "1") { drawMap(); printLegend(); }
         else if (choice == "2") findRoute(g);
-        else if (choice == "3") printLegend();
-        else if (choice == "4") { printf("Goodbye!\n"); break; }
-        else printf("Please enter 1-4.\n");
+        else if (choice == "3") multiStopRoute(g);
+        else if (choice == "4") printLegend();
+        else if (choice == "5") { printf("Goodbye!\n"); break; }
+        else printf("Please enter 1-5.\n");
     }
     return 0;
 }
