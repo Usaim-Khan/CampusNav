@@ -249,7 +249,11 @@ void dijkstra(const Graph& g, int src, double dist[], int parent[], int stopAt =
 const int PATHCAP = 400;
 int pathNodes[PATHCAP];
 int pathLen = 0;
-void clearPath() { pathLen = 0; }
+bool isStop[N];   // intermediate stops of a multi-stop route
+void clearPath() {
+    pathLen = 0;
+    for (int i = 0; i < N; i++) isStop[i] = false;
+}
 
 // Appends the shortest path src -> dst (from parent[]) to the route.
 // The stack reverses the parent chain; the first leg also adds src.
@@ -262,7 +266,9 @@ void appendLeg(const int parent[], int src, int dst) {
 
 // ============================================================ Usaim: terminal colors, menu and CLI
 const char *RESET = "\033[0m", *DIM = "\033[90m", *BOLD = "\033[1m";
-const char* CYANB = "\033[96m\033[1m";
+const char *CYANB = "\033[96m\033[1m", *YELLOWB = "\033[93m\033[1m";
+const char *START_C = "\033[1;7;92m", *END_C = "\033[1;7;91m";
+const char* WAY_C = "\033[1;7;95m";   // intermediate stops (reverse magenta)
 
 // ---- map drawing: the grid is printed with ANSI colors, roads use Bresenham's line algorithm
 const int COL_DIV = 15, ROW_DIV = 28;   // pixel -> terminal cell scale
@@ -278,16 +284,32 @@ void put(int c, int r, const char* ch, const char* col) {
     if (c >= 0 && c < GW && r >= 0 && r < GH) grid[r][c] = {ch, col};
 }
 
-void drawEdge(int u, int v) {
+bool isPathEdge(int u, int v) {
+    for (int i = 0; i + 1 < pathLen; i++)
+        if ((pathNodes[i] == u && pathNodes[i + 1] == v) ||
+            (pathNodes[i] == v && pathNodes[i + 1] == u))
+            return true;
+    return false;
+}
+
+bool onPath(int u) {
+    for (int i = 0; i < pathLen; i++) if (pathNodes[i] == u) return true;
+    return false;
+}
+
+void drawEdge(int u, int v, bool highlight) {
     int c1 = cellCol(NODES[u].x), r1 = cellRow(NODES[u].y);
     int c2 = cellCol(NODES[v].x), r2 = cellRow(NODES[v].y);
-    const char* ch = (c1 == c2) ? "│" : (r1 == r2) ? "─" : "·";
+    const char* ch = (c1 == c2) ? (highlight ? "┃" : "│")
+                   : (r1 == r2) ? (highlight ? "━" : "─")
+                                : (highlight ? "•" : "·");
     int dc = abs(c2 - c1), dr = abs(r2 - r1);
     int sc = c1 < c2 ? 1 : -1, sr = r1 < r2 ? 1 : -1;
     int err = dc - dr, c = c1, r = r1;
     while (true) {   // Bresenham line
         Cell& cell = grid[r][c];
-        if (strcmp(cell.ch, " ") == 0 || strcmp(cell.col, DIM) == 0) put(c, r, ch, DIM);
+        if (highlight || strcmp(cell.ch, " ") == 0 || strcmp(cell.col, DIM) == 0)
+            put(c, r, ch, highlight ? YELLOWB : DIM);
         if (c == c2 && r == r2) break;
         int e2 = 2 * err;
         if (e2 > -dr) { err -= dr; c += sc; }
@@ -316,7 +338,7 @@ void setupConsole() {
 #endif
 }
 
-void drawMap() {
+void drawMap(bool withPath) {
     for (int r = 0; r < GH; r++)
         for (int c = 0; c < GW; c++) grid[r][c] = {" ", ""};
 
@@ -345,9 +367,11 @@ void drawMap() {
         putText((c1 + c2 - (int)strlen(b.label)) / 2 + 1, (r1 + r2) / 2, b.label, DIM);
     }
 
-    // walkways
-    for (int i = 0; i < NUM_EDGES; i++)
-        drawEdge(nodeId(EDGES[i].a), nodeId(EDGES[i].b));
+    // walkways (route edges drawn highlighted)
+    for (int i = 0; i < NUM_EDGES; i++) {
+        int u = nodeId(EDGES[i].a), v = nodeId(EDGES[i].b);
+        drawEdge(u, v, withPath && isPathEdge(u, v));
+    }
 
     // nodes: places show their number, junctions show '+'
     static char labels[N][4];
@@ -359,6 +383,12 @@ void drawMap() {
             text = labels[i]; col = CYANB;
         } else {
             text = "+"; col = DIM;
+        }
+        if (withPath && onPath(i)) {
+            col = YELLOWB;
+            if (isStop[i]) col = WAY_C;
+            if (i == pathNodes[0]) col = START_C;
+            else if (i == pathNodes[pathLen - 1]) col = END_C;
         }
         int c = cellCol(NODES[i].x), r = cellRow(NODES[i].y);
         putText(c - (int)strlen(text) / 2, r, text, col);
@@ -434,6 +464,12 @@ void printTotals(double d) {
            BOLD, RESET, d, BOLD, RESET, walkMinutes(d));
 }
 
+void printLegendLine(bool withStops) {
+    printf("Legend: %s start %s %s end %s ", START_C, RESET, END_C, RESET);
+    if (withStops) printf("%s stop %s ", WAY_C, RESET);
+    printf("%s━ path%s\n", YELLOWB, RESET);
+}
+
 // ---- feature 1: shortest route between two places
 void findRoute(const Graph& g) {
     printLegend();
@@ -448,8 +484,11 @@ void findRoute(const Graph& g) {
 
     clearPath();
     appendLeg(parent, src, dst);
+    printf("\n");
+    drawMap(true);
     printPlacesOnPath();
     printTotals(dist[dst]);
+    printLegendLine(false);
     clearPath();
 }
 
@@ -481,11 +520,16 @@ void multiStopRoute(const Graph& g) {
         total += legDist[k];
         appendLeg(parent, stops[k], stops[k + 1]);
     }
+    for (int k = 1; k + 1 < ns; k++) isStop[stops[k]] = true;
+
+    printf("\n");
+    drawMap(true);
     printf("\n%sLegs:%s\n", BOLD, RESET);
     for (int k = 0; k + 1 < ns; k++)
         printf("  %d. %s → %s   %.0f m\n", k + 1, NODES[stops[k]].name, NODES[stops[k + 1]].name, legDist[k]);
     printPlacesOnPath();
     printTotals(total);
+    printLegendLine(true);
     clearPath();
 }
 
@@ -501,7 +545,7 @@ int main() {
         fflush(stdout);
         string choice;
         getline(cin, choice);
-        if (choice == "1") { drawMap(); printLegend(); }
+        if (choice == "1") { clearPath(); drawMap(false); printLegend(); }
         else if (choice == "2") findRoute(g);
         else if (choice == "3") multiStopRoute(g);
         else if (choice == "4") printLegend();
