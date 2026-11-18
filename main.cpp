@@ -143,6 +143,14 @@ const Box BOXES[NUM_BOXES] = {
 };
 const int BOUND_X1 = 25, BOUND_Y1 = 95, BOUND_X2 = 1500, BOUND_Y2 = 727;
 
+// Facility categories for "nearest facility".
+const int NUM_CATS = 6;
+const char* CAT_NAMES[NUM_CATS] = {
+    "Food & drinks", "Prayer (mosque)", "Sports", "Academic buildings", "Parking", "Main gate / exit"
+};
+//                             gate EE AI juice mosque CSn CSc bball car multi badm foot sportsroom
+const int CATEGORY[NUM_PLACES] = {5, 3, 3, 0, 1, 3, 3, 2, 4, 2, 2, 2, 2};
+
 // ============================================================ Memoona: graph
 // Adjacency list built from hand-written singly linked lists.
 struct Edge { int to; double w; Edge* next; };
@@ -447,6 +455,21 @@ int pickPlace(const char* prompt, bool allowEmpty = false) {
     }
 }
 
+int readChoice(const char* prompt, int lo, int hi) {
+    while (true) {
+        cout << prompt << flush;
+        string s;
+        getline(cin, s);
+        bool digits = !s.empty();
+        for (char c : s) if (!isdigit((unsigned char)c)) digits = false;
+        if (digits) {
+            int v = atoi(s.c_str());
+            if (v >= lo && v <= hi) return v;
+        }
+        printf("  Please enter a number from %d to %d.\n", lo, hi);
+    }
+}
+
 // ---- output helpers
 void printPlacesOnPath() {
     printf("\n%sRoute:%s ", BOLD, RESET);
@@ -533,6 +556,44 @@ void multiStopRoute(const Graph& g) {
     clearPath();
 }
 
+// ---- feature 3: nearest facility: ONE Dijkstra run from the user's location
+void nearestFacility(const Graph& g) {
+    printLegend();
+    int src = pickPlace("\nYour location (number or name): ");
+    printf("\nWhat are you looking for?\n");
+    for (int c = 0; c < NUM_CATS; c++) printf("  %d. %s\n", c + 1, CAT_NAMES[c]);
+    int cat = readChoice("Choice: ", 1, NUM_CATS) - 1;
+
+    double dist[N];
+    int parent[N];
+    dijkstra(g, src, dist, parent);   // all distances at once
+
+    int cand[NUM_PLACES], nc = 0;
+    for (int i = 0; i < NUM_PLACES; i++)
+        if (i != src && CATEGORY[i] == cat && dist[i] < INF) cand[nc++] = i;
+    if (nc == 0) {
+        printf("No other place in '%s' found from %s.\n", CAT_NAMES[cat], NODES[src].name);
+        return;
+    }
+    for (int i = 1; i < nc; i++) {   // insertion sort by distance
+        int key = cand[i], j = i - 1;
+        while (j >= 0 && dist[cand[j]] > dist[key]) { cand[j + 1] = cand[j]; j--; }
+        cand[j + 1] = key;
+    }
+
+    clearPath();
+    appendLeg(parent, src, cand[0]);
+    printf("\n");
+    drawMap(true);
+    printf("\n%sNearest %s from %s:%s\n", BOLD, CAT_NAMES[cat], NODES[src].name, RESET);
+    for (int i = 0; i < nc; i++)
+        printf("  %d. %-30s %4.0f m  (~%.1f min)%s\n", i + 1, NODES[cand[i]].name, dist[cand[i]],
+               walkMinutes(dist[cand[i]]), i == 0 ? "   <- shown on map" : "");
+    printPlacesOnPath();
+    printLegendLine(false);
+    clearPath();
+}
+
 int main() {
     setupConsole();
     Graph g;
@@ -541,16 +602,18 @@ int main() {
 
     while (true) {
         printf("\n%s=== CampusNav ===%s\n", BOLD, RESET);
-        printf("1. Show map\n2. Shortest route\n3. Multi-stop route\n4. List locations\n5. Quit\nChoice: ");
+        printf("1. Show map\n2. Shortest route\n3. Multi-stop route\n4. Nearest facility\n"
+               "5. List locations\n6. Quit\nChoice: ");
         fflush(stdout);
         string choice;
         getline(cin, choice);
         if (choice == "1") { clearPath(); drawMap(false); printLegend(); }
         else if (choice == "2") findRoute(g);
         else if (choice == "3") multiStopRoute(g);
-        else if (choice == "4") printLegend();
-        else if (choice == "5") { printf("Goodbye!\n"); break; }
-        else printf("Please enter 1-5.\n");
+        else if (choice == "4") nearestFacility(g);
+        else if (choice == "5") printLegend();
+        else if (choice == "6") { printf("Goodbye!\n"); break; }
+        else printf("Please enter 1-6.\n");
     }
     return 0;
 }
