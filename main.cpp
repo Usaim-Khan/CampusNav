@@ -1,5 +1,14 @@
 // CampusNav - Campus Route Finder (CLI) - C++17
-// Group project: Usaim, Memoona, Amna.
+// Features: shortest route, multi-stop route (A -> B -> C ...), nearest facility.
+// Graph + Dijkstra with hand-written data structures (no std::vector/map/
+// priority_queue/stack/queue). Only cstdio, iostream and std::string are used for I/O.
+//
+// Owners: Usaim   - hash table, stack, map drawing, menu / CLI
+//         Memoona - map data, graph, distances, nearest facility
+//         Amna    - min-heap, Dijkstra, multi-stop route, input checks
+//
+// Build:  g++ -std=c++17 -O2 campus_map.cpp -o campus_map
+// Run:    ./campus_map      (use a terminal at least 105 columns wide)
 
 #include <cctype>
 #include <cmath>
@@ -188,6 +197,7 @@ int nodeId(const char* name) { return nameTable().get(name); }
 void buildCampusGraph(Graph& g) {
     for (int i = 0; i < NUM_EDGES; i++) {
         int u = nodeId(EDGES[i].a), v = nodeId(EDGES[i].b);
+        if (u < 0 || v < 0) { fprintf(stderr, "Unknown node name in EDGES[%d]\n", i); exit(1); }
         double w = hypot(NODES[u].x - NODES[v].x, NODES[u].y - NODES[v].y) * PX_TO_M;   // meters
         g.addEdge(u, v, w);
     }
@@ -201,6 +211,7 @@ public:
     MinHeap() : n(0) {}
     bool empty() const { return n == 0; }
     void push(int node, double d) {
+        if (n >= CAP) { fprintf(stderr, "MinHeap is full\n"); exit(1); }
         a[n] = {d, node};
         int i = n++;
         while (i > 0 && a[(i - 1) / 2].d > a[i].d) {   // sift up
@@ -223,7 +234,8 @@ public:
         return top;
     }
 private:
-    HeapItem a[256];   // enough for all relaxations in this graph
+    static const int CAP = 256;   // enough for all relaxations in this graph
+    HeapItem a[CAP];
     int n;
     static void swapItems(HeapItem& x, HeapItem& y) { HeapItem t = x; x = y; y = t; }
 };
@@ -431,15 +443,21 @@ string lower(string s) {
     return s;
 }
 
+string trimmed(string s) {
+    size_t a = s.find_first_not_of(" \t\r"), b = s.find_last_not_of(" \t\r");
+    return (a == string::npos) ? "" : s.substr(a, b - a + 1);
+}
+
 // Asks for a place by number or (unique part of) name.
 // If allowEmpty is true, an empty line returns -1.
 int pickPlace(const char* prompt, bool allowEmpty = false) {
     while (true) {
         cout << prompt << flush;
         string s;
-        getline(cin, s);
+        if (!getline(cin, s)) exit(0);   // end of input: stop instead of looping forever
+        s = trimmed(s);
         if (s.empty() && allowEmpty) return -1;
-        bool digits = !s.empty();
+        bool digits = !s.empty() && s.size() <= 3;   // also avoids huge numbers
         for (char c : s) if (!isdigit((unsigned char)c)) digits = false;
         if (digits) {
             int v = atoi(s.c_str());
@@ -459,8 +477,9 @@ int readChoice(const char* prompt, int lo, int hi) {
     while (true) {
         cout << prompt << flush;
         string s;
-        getline(cin, s);
-        bool digits = !s.empty();
+        if (!getline(cin, s)) exit(0);
+        s = trimmed(s);
+        bool digits = !s.empty() && s.size() <= 3;
         for (char c : s) if (!isdigit((unsigned char)c)) digits = false;
         if (digits) {
             int v = atoi(s.c_str());
@@ -529,6 +548,10 @@ void multiStopRoute(const Graph& g) {
         else snprintf(prompt, sizeof prompt, "Stop %d%s: ", ns + 1, ns >= 2 ? " (Enter to finish)" : "");
         int s = pickPlace(prompt, ns >= 2);
         if (s < 0) break;
+        if (ns > 0 && s == stops[ns - 1]) {
+            printf("  Same as the previous stop; choose a different place.\n");
+            continue;
+        }
         stops[ns++] = s;
     }
 
@@ -606,7 +629,8 @@ int main() {
                "5. List locations\n6. Quit\nChoice: ");
         fflush(stdout);
         string choice;
-        getline(cin, choice);
+        if (!getline(cin, choice)) break;   // end of input
+        choice = trimmed(choice);
         if (choice == "1") { clearPath(); drawMap(false); printLegend(); }
         else if (choice == "2") findRoute(g);
         else if (choice == "3") multiStopRoute(g);
