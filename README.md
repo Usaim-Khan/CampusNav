@@ -209,13 +209,13 @@ Built by three members of the Data Structures lab group:
 | Member | Contributions |
 |---|---|
 | [Usaim Khan](https://github.com/Usaim-Khan) | Hash table, stack, map drawing, menu / CLI |
-| Memoona | Map data, graph, distances, nearest facility |
-| Amna Rehan | Min-heap, Dijkstra, multi-stop route, input checks |
+| [Memoona](https://github.com/Memoona-237) | Map data, graph, distances, nearest facility |
+| [Amna Rehan](https://github.com/amna-24) | Min-heap, Dijkstra, multi-stop route, input checks |
 
 ---
 
 <div align="center">
 
-Built by [Usaim Khan](https://github.com/Usaim-Khan), Memoona, and Amna Rehan
+Built by [Usaim Khan](https://github.com/Usaim-Khan), [Memoona](https://github.com/Memoona-237), and [Amna Rehan](https://github.com/amna-24)
 
 </div>
