@@ -7,8 +7,8 @@
 //         Memoona - map data, graph, distances, nearest facility
 //         Amna    - min-heap, Dijkstra, multi-stop route, input checks
 //
-// Build:  g++ -std=c++17 -O2 campus_map.cpp -o campus_map
-// Run:    ./campus_map      (use a terminal at least 105 columns wide)
+// Build:  g++ -std=c++17 -O2 main.cpp -o main
+// Run:    ./main      (use a terminal at least 105 columns wide)
 
 #include <cctype>
 #include <cmath>
@@ -92,45 +92,69 @@ private:
 // Pixel coordinates are taken from the campus map image.
 struct Node { const char* name; int x, y; };
 
-const int NUM_PLACES = 13;   // selectable places come first
-const int N = 33;            // places + junctions
-const Node NODES[N] = {
+const int NUM_PLACES = 15;   // selectable places come first (numbers 1..15)
+
+// Names starting with '.' are hidden points (building entrances): they join roads and
+// corridors but are not drawn. Other junctions are drawn as '+'.
+const Node NODES[] = {
     {"Main Gate", 498, 118},
-    {"EE Building", 299, 452},
+    {"EE Building", 299, 420},
     {"AI Department", 479, 524},
     {"Fresh Juice Corner", 376, 577},
     {"FAST Mosque", 558, 670},
-    {"CS Building (North Entrance)", 760, 370},
-    {"CS Building (Courtyard)", 760, 525},
-    {"Basketball / Volleyball", 880, 321},
-    {"Car Parking", 1058, 203},
-    {"Multipurpose Hall", 1145, 373},
+    {"CS Building (North Entrance)", 760, 286},
+    {"CS Building (Courtyard)", 760, 441},
+    {"Basketball / Volleyball", 880, 237},
+    {"Car Parking", 1058, 140},
+    {"Multipurpose Hall", 1035, 532},
     {"Badminton Court", 1262, 313},
     {"Football / Futsal", 1262, 482},
-    {"Sports Room", 1342, 648},
-    // junctions (road / walkway intersections)
-    {"a", 498, 340}, {"b", 498, 452}, {"q", 498, 524}, {"c", 498, 605},
-    {"o", 498, 670}, {"p", 498, 700}, {"d", 760, 340}, {"e", 880, 340},
-    {"f", 1008, 118}, {"g", 1008, 203}, {"h", 1008, 340}, {"i", 1008, 373},
-    {"j", 1008, 605}, {"m", 1008, 700}, {"k", 760, 605}, {"l", 950, 605},
-    {"n", 1342, 700}, {"r", 498, 577}, {"t", 1262, 373}, {"u", 1262, 648},
+    {"Sports Room", 1262, 644},
+    {"Biryani Stall", 300, 672},
+    {"Back Gate", 498, 700},
+    // junctions: roads and walkways
+    {"a", 498, 256}, {"b", 498, 420}, {"b2", 498, 364}, {"q", 498, 524},
+    {"o", 498, 670}, {"d", 760, 256}, {"e", 880, 256},
+    {"f", 1008, 118}, {"g", 1008, 140}, {"h", 1008, 256}, {"i", 1008, 373},
+    {"m", 1008, 700}, {"k", 760, 524}, {"l", 950, 524}, {"v", 1008, 532},
+    {"n", 1262, 700}, {"r", 498, 577}, {"t", 1262, 373}, {"t2", 1262, 224},
+    {"tl", 165, 112}, {"tm", 300, 112}, {"lj", 300, 588}, {"tl2", 165, 672},
+    // inside the buildings: crossings of the corridors
+    {"ee_mid", 165, 420}, {"cs_c", 765, 364},
+    // building entrances (hidden)
+    {".ee_top", 165, 140}, {".ee_bot", 165, 644}, {".ee_east", 255, 420},
+    {".cs_w", 540, 364}, {".cs_e", 975, 364}, {".cs_n", 765, 308}, {".cs_s", 765, 504},
 };
+const int N = sizeof(NODES) / sizeof(NODES[0]);   // places + junctions
 
-struct EdgeDef { const char *a, *b; };
-const int NUM_EDGES = 36;
-const EdgeDef EDGES[NUM_EDGES] = {
-    {"Main Gate", "a"}, {"Main Gate", "f"}, {"a", "b"}, {"b", "q"}, {"q", "r"},
-    {"r", "c"}, {"c", "o"}, {"o", "p"}, {"p", "m"}, {"o", "FAST Mosque"},
+struct EdgeDef { const char *a, *b; bool inside = false; };   // inside = corridor inside a building (drawn dashed)
+const EdgeDef EDGES[] = {
+    // main walkway (west side), roads along the top, gates
+    {"Main Gate", "a"}, {"Main Gate", "f"}, {"a", "b2"}, {"b2", "b"}, {"b", "q"}, {"q", "r"},
+    {"r", "o"}, {"o", "Back Gate"}, {"o", "FAST Mosque"},
     {"b", "EE Building"}, {"q", "AI Department"}, {"r", "Fresh Juice Corner"},
     {"a", "d"}, {"d", "e"}, {"e", "h"},
     {"d", "CS Building (North Entrance)"}, {"e", "Basketball / Volleyball"},
-    {"c", "k"}, {"k", "l"}, {"l", "j"}, {"k", "CS Building (Courtyard)"},
-    {"f", "g"}, {"g", "h"}, {"h", "i"}, {"i", "j"}, {"j", "m"},
-    {"g", "Car Parking"}, {"i", "Multipurpose Hall"},
-    {"Multipurpose Hall", "t"}, {"t", "Badminton Court"},
-    {"t", "Football / Futsal"}, {"Football / Futsal", "u"}, {"u", "Sports Room"},
-    {"m", "n"}, {"n", "Sports Room"},
+    {"q", "k"}, {"k", "l"}, {"l", "v"},
+    // vertical road next to the multipurpose hall, parking
+    {"f", "g"}, {"g", "h"}, {"h", "i"}, {"i", "v"}, {"v", "m"},
+    {"g", "Car Parking"}, {"v", "Multipurpose Hall"}, {"i", "t"},
+    // court lane on the east side
+    {"t", "Badminton Court"}, {"Badminton Court", "t2"}, {"t", "Football / Futsal"},
+    {"Football / Futsal", "Sports Room"}, {"Sports Room", "n"}, {"m", "n"},
+    // roads on the west side: top road and left road down to the Biryani stall
+    {"Main Gate", "tm"}, {"tm", "tl"}, {"tm", "EE Building"}, {"EE Building", "lj"},
+    {"lj", "Fresh Juice Corner"}, {"lj", "Biryani Stall"}, {"Biryani Stall", "o"},
+    {"Biryani Stall", "tl2"},
+    // EE building: three entrances joined by the corridor inside
+    {"tl", ".ee_top"}, {"tl2", ".ee_bot"}, {".ee_top", "ee_mid", true}, {"ee_mid", ".ee_bot", true},
+    {"ee_mid", ".ee_east", true}, {".ee_east", "EE Building"},
+    // CS building: west / east corridor, north - courtyard - south corridor
+    {"b2", ".cs_w"}, {".cs_w", "cs_c", true}, {"cs_c", ".cs_e", true}, {".cs_e", "i"},
+    {"CS Building (North Entrance)", ".cs_n"}, {".cs_n", "cs_c", true},
+    {"cs_c", "CS Building (Courtyard)", true}, {"CS Building (Courtyard)", ".cs_s", true}, {".cs_s", "k"},
 };
+const int NUM_EDGES = sizeof(EDGES) / sizeof(EDGES[0]);   // walkways
 
 // Scale: the campus is 270 m wide (measured on Google Maps) and spans 1475 px
 // in the map image (boundary x = 25 .. 1500), so 1 px = 270 / 1475 m.
@@ -142,14 +166,16 @@ const double WALK_SPEED = 1.3;   // meters per second
 double walkMinutes(double meters) { return meters / WALK_SPEED / 60.0; }
 
 // Building outlines and the campus boundary, used when drawing the map.
-struct Box { int x1, y1, x2, y2; const char* label; };
-const int NUM_BOXES = 7;
-const Box BOXES[NUM_BOXES] = {
-    {92, 250, 250, 655, "EE BLOCK"},     {542, 395, 978, 600, "CS BUILDING"},
-    {1038, 443, 1220, 655, "MULTI HALL"}, {1066, 161, 1425, 245, "PARKING"},
-    {798, 216, 963, 312, "BASKETBALL"},   {1292, 280, 1425, 368, "COURT"},
-    {1292, 385, 1425, 580, "FOOTBALL"},
+struct Box { int x1, y1, x2, y2; const char* label; int dy; };   // dy: label row shift from the centre
+const Box BOXES[] = {
+    {92, 140, 250, 655, "EE BLOCK", 0},    {542, 311, 978, 516, "CS BUILDING", 0},
+    {1038, 443, 1220, 655, "MULTI HALL", 0}, {1066, 112, 1425, 196, "PARKING", 0},
+    {798, 132, 963, 228, "BASKETBALL", 0},   {1292, 224, 1425, 368, "COURT", 0},
+    {1292, 385, 1425, 580, "FOOTBALL", 0},   {1292, 616, 1425, 700, "SPORTS", 0},
+    {525, 616, 630, 700, "MOSQUE", 0},
+    {270, 644, 330, 700, "", 0},
 };
+const int NUM_BOXES = sizeof(BOXES) / sizeof(BOXES[0]);
 const int BOUND_X1 = 25, BOUND_Y1 = 95, BOUND_X2 = 1500, BOUND_Y2 = 727;
 
 // Facility categories for "nearest facility".
@@ -157,8 +183,8 @@ const int NUM_CATS = 6;
 const char* CAT_NAMES[NUM_CATS] = {
     "Food & drinks", "Prayer (mosque)", "Sports", "Academic buildings", "Parking", "Main gate / exit"
 };
-//                             gate EE AI juice mosque CSn CSc bball car multi badm foot sportsroom
-const int CATEGORY[NUM_PLACES] = {5, 3, 3, 0, 1, 3, 3, 2, 4, 2, 2, 2, 2};
+//                             gate EE AI juice mosque CSn CSc bball car multi badm foot sports biryani backgate
+const int CATEGORY[NUM_PLACES] = {5, 3, 3, 0, 1, 3, 3, 2, 4, 2, 2, 2, 2, 0, 5};
 
 // ============================================================ Memoona: graph
 // Adjacency list built from hand-written singly linked lists.
@@ -266,7 +292,7 @@ void dijkstra(const Graph& g, int src, double dist[], int parent[], int stopAt =
 }
 
 // The route being built (node ids in walking order, places and junctions).
-const int PATHCAP = 400;
+const int PATHCAP = 500;
 int pathNodes[PATHCAP];
 int pathLen = 0;
 bool isStop[N];   // intermediate stops of a multi-stop route
@@ -286,6 +312,7 @@ void appendLeg(const int parent[], int src, int dst) {
 
 // ============================================================ Usaim: terminal colors, menu and CLI
 const char *RESET = "\033[0m", *DIM = "\033[90m", *BOLD = "\033[1m";
+const char* LABEL_C = "\033[0;90m";   // building labels (looks like DIM, but roads never draw over it)
 const char *CYANB = "\033[96m\033[1m", *YELLOWB = "\033[93m\033[1m";
 const char *START_C = "\033[1;7;92m", *END_C = "\033[1;7;91m";
 const char* WAY_C = "\033[1;7;95m";   // intermediate stops (reverse magenta)
@@ -317,18 +344,20 @@ bool onPath(int u) {
     return false;
 }
 
-void drawEdge(int u, int v, bool highlight) {
+void drawEdge(int u, int v, bool highlight, bool inside) {
     int c1 = cellCol(NODES[u].x), r1 = cellRow(NODES[u].y);
     int c2 = cellCol(NODES[v].x), r2 = cellRow(NODES[v].y);
-    const char* ch = (c1 == c2) ? (highlight ? "┃" : "│")
-                   : (r1 == r2) ? (highlight ? "━" : "─")
+    // roads are solid lines; corridors inside buildings are dashed
+    const char* ch = (c1 == c2) ? (highlight ? (inside ? "┇" : "┃") : (inside ? "┆" : "│"))
+                   : (r1 == r2) ? (highlight ? (inside ? "┅" : "━") : (inside ? "┄" : "─"))
                                 : (highlight ? "•" : "·");
     int dc = abs(c2 - c1), dr = abs(r2 - r1);
     int sc = c1 < c2 ? 1 : -1, sr = r1 < r2 ? 1 : -1;
     int err = dc - dr, c = c1, r = r1;
     while (true) {   // Bresenham line
         Cell& cell = grid[r][c];
-        if (highlight || strcmp(cell.ch, " ") == 0 || strcmp(cell.col, DIM) == 0)
+        if (strcmp(cell.col, LABEL_C) != 0 &&   // never draw over a building label
+            (highlight || strcmp(cell.ch, " ") == 0 || strcmp(cell.col, DIM) == 0))
             put(c, r, ch, highlight ? YELLOWB : DIM);
         if (c == c2 && r == r2) break;
         int e2 = 2 * err;
@@ -365,10 +394,11 @@ void drawMap(bool withPath) {
     // campus boundary (open at the main gate)
     int bc1 = cellCol(BOUND_X1), br1 = cellRow(BOUND_Y1);
     int bc2 = cellCol(BOUND_X2), br2 = cellRow(BOUND_Y2);
-    int gateCol = cellCol(NODES[0].x);
+    int gateCol = cellCol(NODES[0].x);                        // Main Gate: gap in the top border
+    int backGateCol = cellCol(NODES[nodeId("Back Gate")].x);  // Back Gate: gap in the bottom border
     for (int c = bc1; c <= bc2; c++) {
         if (c != gateCol) put(c, br1, "═", DIM);
-        put(c, br2, "═", DIM);
+        if (c != backGateCol) put(c, br2, "═", DIM);
     }
     for (int r = br1; r <= br2; r++) { put(bc1, r, "║", DIM); put(bc2, r, "║", DIM); }
     put(bc1, br1, "╔", DIM); put(bc2, br1, "╗", DIM);
@@ -384,18 +414,22 @@ void drawMap(bool withPath) {
         for (int r = r1; r <= r2; r++) { put(c1, r, "│", DIM); put(c2, r, "│", DIM); }
         put(c1, r1, "┌", DIM); put(c2, r1, "┐", DIM);
         put(c1, r2, "└", DIM); put(c2, r2, "┘", DIM);
-        putText((c1 + c2 - (int)strlen(b.label)) / 2 + 1, (r1 + r2) / 2, b.label, DIM);
+        putText((c1 + c2 - (int)strlen(b.label)) / 2 + 1, (r1 + r2) / 2 + b.dy, b.label, LABEL_C);
     }
 
-    // walkways (route edges drawn highlighted)
-    for (int i = 0; i < NUM_EDGES; i++) {
-        int u = nodeId(EDGES[i].a), v = nodeId(EDGES[i].b);
-        drawEdge(u, v, withPath && isPathEdge(u, v));
+    // walkways (route edges drawn highlighted): roads first, then corridors inside buildings
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < NUM_EDGES; i++) {
+            if (EDGES[i].inside != (pass == 1)) continue;
+            int u = nodeId(EDGES[i].a), v = nodeId(EDGES[i].b);
+            drawEdge(u, v, withPath && isPathEdge(u, v), EDGES[i].inside);
+        }
     }
 
     // nodes: places show their number, junctions show '+'
     static char labels[N][4];
     for (int i = 0; i < N; i++) {
+        if (i >= NUM_PLACES && NODES[i].name[0] == '.') continue;   // hidden entrance points
         const char* col;
         const char* text;
         if (i < NUM_PLACES) {
